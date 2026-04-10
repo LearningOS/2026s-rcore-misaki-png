@@ -30,7 +30,7 @@ mod process;
 use fs::*;
 use process::*;
 
-use crate::{syscall, task::push_id};
+use crate::{task::push_id};
 
 // use crate::{task::push_id};
 
@@ -49,7 +49,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }
-
+/// get index
 pub fn get_index(syscall_id: usize) -> Option<usize> {
     TRACKED_SYSCALLS.iter().position(|&id| id == syscall_id)
 }
