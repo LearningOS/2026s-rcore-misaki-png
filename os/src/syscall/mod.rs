@@ -25,14 +25,39 @@ const SYSCALL_MMAP: usize = 222;
 /// trace syscall
 const SYSCALL_TRACE: usize = 410;
 
+/// the map table
+pub fn map_syscall_id_to_index(syscall_id: usize) -> Option<usize> {
+    match syscall_id {
+        64 => Some(0),
+        93 => Some(1),
+        124 => Some(2),
+        169 => Some(3),
+        214 => Some(4),
+        215 => Some(5),
+        222 => Some(6),
+        410 => Some(7),
+        _ => None
+    }
+}
+
 mod fs;
 mod process;
 
 use fs::*;
 use process::*;
 
+use crate::task::{get_syscall_count, set_syscall_count};
+
 /// handle syscall exception with `syscall_id` and other arguments
 pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
+    match map_syscall_id_to_index(syscall_id) {
+        Some(i) => {
+            let prev = get_syscall_count(i);
+            set_syscall_count(i, prev + 1);
+        }
+        None => panic!("Unsupported syscall_id: {}", syscall_id)
+    }
+
     match syscall_id {
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),

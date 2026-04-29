@@ -153,6 +153,18 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    fn get_syscall_count(&self, i: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let curr = inner.current_task;
+        inner.tasks[curr].syscall_counter[i]
+    }
+
+    fn set_syscall_count(&self, i: usize, val: usize){
+        let mut inner = self.inner.exclusive_access();
+        let curr = inner.current_task;
+        inner.tasks[curr].syscall_counter[i] = val;
+    }
 }
 
 /// Run the first task in task list.
@@ -201,4 +213,27 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// get syscall count
+pub fn get_syscall_count(i: usize) -> usize {
+    TASK_MANAGER.get_syscall_count(i)
+}
+/// set syscall count
+pub fn set_syscall_count(i: usize, val: usize){
+    TASK_MANAGER.set_syscall_count(i, val);
+}
+
+/// current mmap
+pub fn current_mmap(start: usize, len: usize, port: usize) -> isize {
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let curr = inner.current_task;
+    inner.tasks[curr].memory_set.mmap(start, len, port)
+}
+
+/// current munmap
+pub fn current_munmap(start: usize, len: usize) -> isize {
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let curr = inner.current_task;
+    inner.tasks[curr].memory_set.munmap(start, len)
 }
