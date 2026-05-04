@@ -21,7 +21,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::loader::get_app_data_by_name;
+use crate::{config::BIG_STRIDE, loader::get_app_data_by_name, task::manager::put_back};
 use alloc::sync::Arc;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
@@ -42,6 +42,8 @@ pub fn suspend_current_and_run_next() {
 
     // ---- access current TCB exclusively
     let mut task_inner = task.inner_exclusive_access();
+    task_inner.stride += BIG_STRIDE / task_inner.priority;
+    let new_stride = task_inner.stride;
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
     // Change status to Ready
     task_inner.task_status = TaskStatus::Ready;
@@ -49,7 +51,7 @@ pub fn suspend_current_and_run_next() {
     // ---- release current PCB
 
     // push back to ready queue.
-    add_task(task);
+    put_back(task, new_stride);
     // jump to scheduling cycle
     schedule(task_cx_ptr);
 }

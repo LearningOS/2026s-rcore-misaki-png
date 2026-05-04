@@ -1,12 +1,39 @@
 //!Implementation of [`TaskManager`]
 use super::TaskControlBlock;
 use crate::sync::UPSafeCell;
-use alloc::collections::VecDeque;
+use alloc::collections::binary_heap::BinaryHeap;
 use alloc::sync::Arc;
 use lazy_static::*;
 ///A array of `TaskControlBlock` that is thread-safe
+
+struct StrideTask {
+    stride: usize,
+    tcb: Arc<TaskControlBlock>
+}
+
+impl Eq for StrideTask { }
+
+impl PartialEq for StrideTask {
+    fn eq(&self, other: &Self) -> bool {
+        self.stride == other.stride
+    }
+}
+
+impl Ord for StrideTask {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        other.stride.cmp(&self.stride)
+    }
+}
+
+impl PartialOrd for StrideTask {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// TaskManager
 pub struct TaskManager {
-    ready_queue: VecDeque<Arc<TaskControlBlock>>,
+    ready_queue: BinaryHeap<StrideTask>,
 }
 
 /// A simple FIFO scheduler.
@@ -14,16 +41,20 @@ impl TaskManager {
     ///Creat an empty TaskManager
     pub fn new() -> Self {
         Self {
-            ready_queue: VecDeque::new(),
+            ready_queue: BinaryHeap::new(),
         }
     }
     /// Add process back to ready queue
     pub fn add(&mut self, task: Arc<TaskControlBlock>) {
-        self.ready_queue.push_back(task);
+        self.ready_queue.push(StrideTask { stride: 0, tcb: task });
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.ready_queue.pop_front()
+        self.ready_queue.pop().map(|st| st.tcb)
+    }
+    /// put back
+    pub fn put_back(&mut self, task: Arc<TaskControlBlock>, new_stride: usize) {
+        self.ready_queue.push(StrideTask { stride: new_stride, tcb: task })
     }
 }
 
@@ -43,4 +74,8 @@ pub fn add_task(task: Arc<TaskControlBlock>) {
 pub fn fetch_task() -> Option<Arc<TaskControlBlock>> {
     //trace!("kernel: TaskManager::fetch_task");
     TASK_MANAGER.exclusive_access().fetch()
+}
+
+pub fn put_back(task: Arc<TaskControlBlock>, new_stride: usize) {
+    TASK_MANAGER.exclusive_access().put_back(task, new_stride);
 }
