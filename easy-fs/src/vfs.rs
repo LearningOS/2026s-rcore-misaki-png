@@ -6,6 +6,9 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::{Mutex, MutexGuard};
+
+
+
 /// Virtual filesystem layer over easy-fs
 pub struct Inode {
     block_id: usize,
@@ -182,5 +185,54 @@ impl Inode {
             }
         });
         block_cache_sync_all();
+    }
+
+    /// linkat
+    pub fn linkat(&self, old_path: &str, new_path: &str) -> isize {
+        if old_path == new_path {
+            return -1;
+        }
+        self.modify_disk_inode(|disk_inode| {
+            disk_inode.nlink += 1;
+            let inode_id = self.find_inode_id(old_path, disk_inode).unwrap();
+            let new_dirent = DirEntry::new(new_path, inode_id);
+            let offset = disk_inode.size;
+            self.write_at(offset as usize, new_dirent.as_bytes());
+            0
+        })
+    }
+
+    /// unlinkat
+    pub fn unlinkat(&self, name: &str) -> isize {
+        self.modify_disk_inode(|disk_inode| {
+            let file_count = disk_inode.size as usize / DIRENT_SZ;
+            let mut dirent = DirEntry::empty();
+
+            for i in 0..file_count {
+                self.read_at(DIRENT_SZ * i, dirent.as_bytes_mut());
+                if dirent.name() == name {
+                    self.write_at(DIRENT_SZ * i, DirEntry::empty().as_bytes());
+                    disk_inode.nlink -= 1;
+                    if disk_inode.nlink == 0 {
+                        self.clear();
+                    }
+                    return 0;
+                }
+            }
+            -1
+        })
+    }
+
+    fn get_inode_id(&self) -> u64 {
+        let fs = self.fs.lock();
+        fs.get_inode_id(self.block_id, self.block_offset)
+    }
+
+    /// (inode_id, is_file, nink)
+    pub fn get_stat(&self) -> (u64, bool, u32) {
+        self.read_disk_inode(|disk_inode| {
+            let is_file = disk_inode.is_file();
+            (self.get_inode_id(), is_file, disk_inode.nlink)
+        })
     }
 }

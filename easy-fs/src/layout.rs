@@ -6,7 +6,7 @@ use core::fmt::{Debug, Formatter, Result};
 /// Magic number for sanity check
 const EFS_MAGIC: u32 = 0x3b800001;
 /// The max number of direct inodes
-const INODE_DIRECT_COUNT: usize = 28;
+const INODE_DIRECT_COUNT: usize = 27;
 /// The max length of inode name
 const NAME_LENGTH_LIMIT: usize = 27;
 /// The max number of indirect1 inodes
@@ -24,10 +24,15 @@ const INDIRECT2_BOUND: usize = INDIRECT1_BOUND + INODE_INDIRECT2_COUNT;
 #[repr(C)]
 pub struct SuperBlock {
     magic: u32,
+    /// total blocks
     pub total_blocks: u32,
+    /// inode bitmap
     pub inode_bitmap_blocks: u32,
+    /// inode arra
     pub inode_area_blocks: u32,
+    /// data bitmap
     pub data_bitmap_blocks: u32,
+    /// data_area
     pub data_area_blocks: u32,
 }
 
@@ -70,7 +75,9 @@ impl SuperBlock {
 /// Type of a disk inode
 #[derive(PartialEq)]
 pub enum DiskInodeType {
+    /// file
     File,
+    /// directory
     Directory,
 }
 
@@ -81,10 +88,16 @@ type DataBlock = [u8; BLOCK_SZ];
 /// A disk inode
 #[repr(C)]
 pub struct DiskInode {
+    /// size
     pub size: u32,
+    /// direct
     pub direct: [u32; INODE_DIRECT_COUNT],
+    /// indireect1
     pub indirect1: u32,
+    /// indirect2
     pub indirect2: u32,
+    /// nlink
+    pub nlink: u32,
     type_: DiskInodeType,
 }
 
@@ -96,6 +109,7 @@ impl DiskInode {
         self.direct.iter_mut().for_each(|v| *v = 0);
         self.indirect1 = 0;
         self.indirect2 = 0;
+        self.nlink = 1;
         self.type_ = type_;
     }
     /// Whether this inode is a directory

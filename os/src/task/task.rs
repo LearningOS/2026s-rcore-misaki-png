@@ -36,6 +36,43 @@ impl TaskControlBlock {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
     }
+
+    /// new for spawn
+    pub fn new_for_spawn(self: &Arc<TaskControlBlock>) -> Arc<TaskControlBlock> {
+        let pid = pid_alloc();
+        let kernel_stack = kstack_alloc();
+        let kernel_stack_top = kernel_stack.get_top();
+
+        let new_task = Arc::new(TaskControlBlock {
+            pid,
+            kernel_stack,
+            inner: unsafe {
+                UPSafeCell::new(TaskControlBlockInner {
+                    trap_cx_ppn: PhysPageNum::from(0),
+                    base_size: 0,
+                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+                    task_status: TaskStatus::Ready,
+                    memory_set: MemorySet::new_bare(),
+                    parent: Some(Arc::downgrade(self)),
+                    children: Vec::new(),
+                    exit_code: 0,
+                    fd_table: vec![Some(Arc::new(Stdin)),
+                        Some(Arc::new(Stdout)),
+                        Some(Arc::new(Stdout))],
+                    heap_bottom: 0,
+                    program_brk: 0,
+                    priority: 16,
+                    stride: 0
+                })
+                }
+            }
+        );
+
+        let mut parent_inner = self.inner_exclusive_access();
+        parent_inner.children.push(new_task.clone());
+
+        new_task
+    }
 }
 
 pub struct TaskControlBlockInner {
@@ -71,6 +108,12 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// priority
+    pub priority: usize,
+
+    /// stride
+    pub stride: usize,
 }
 
 impl TaskControlBlockInner {
@@ -135,6 +178,8 @@ impl TaskControlBlock {
                     ],
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    priority: 16,
+                    stride: 0
                 })
             },
         };
@@ -216,6 +261,8 @@ impl TaskControlBlock {
                     fd_table: new_fd_table,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    priority: 16,
+                    stride: 0,
                 })
             },
         });
