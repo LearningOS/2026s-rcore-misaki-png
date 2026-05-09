@@ -86,6 +86,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     task_inner.res = None;
     // here we do not remove the thread since we are still using the kstack
     // it will be deallocated when sys_waittid is called
+
     drop(task_inner);
 
     // Move the task to stop-wait status, to avoid kernel stack from being freed

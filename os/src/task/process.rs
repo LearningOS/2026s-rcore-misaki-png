@@ -7,7 +7,7 @@ use super::{add_task, SignalFlags};
 use super::{pid_alloc, PidHandle};
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
-use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
+use crate::sync::{Condvar, DeadlockDetector, Mutex, Semaphore, UPSafeCell};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -49,6 +49,12 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// deadlock_detect_enabled
+    pub deadlock_detect_enabled: bool,
+    /// mutex_detector
+    pub mutex_deadlock_detector: DeadlockDetector,
+    /// sema_detector
+    pub sema_deadlock_detector: DeadlockDetector,
 }
 
 impl ProcessControlBlockInner {
@@ -119,6 +125,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect_enabled: false,
+                    mutex_deadlock_detector: DeadlockDetector::new(),
+                    sema_deadlock_detector: DeadlockDetector::new(),
                 })
             },
         });
@@ -143,6 +152,12 @@ impl ProcessControlBlock {
         );
         // add main thread to the process
         let mut process_inner = process.inner_exclusive_access();
+        // initialize deadlock detector
+        let m1 = process_inner.mutex_list.len();
+        let m2 = process_inner.semaphore_list.len();
+        process_inner.mutex_deadlock_detector.initialize(0, m1);
+        process_inner.sema_deadlock_detector.initialize(0, m2);
+
         process_inner.tasks.push(Some(Arc::clone(&task)));
         drop(process_inner);
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
@@ -245,6 +260,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect_enabled: false,
+                    mutex_deadlock_detector: DeadlockDetector::new(),
+                    sema_deadlock_detector: DeadlockDetector::new(),
                 })
             },
         });
@@ -266,6 +284,13 @@ impl ProcessControlBlock {
         ));
         // attach task to child process
         let mut child_inner = child.inner_exclusive_access();
+
+        // initialize deadlock detector
+        let m1 = child_inner.mutex_list.len();
+        let m2 = child_inner.semaphore_list.len();
+        child_inner.mutex_deadlock_detector.initialize(0, m1);
+        child_inner.sema_deadlock_detector.initialize(0, m2);
+
         child_inner.tasks.push(Some(Arc::clone(&task)));
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
